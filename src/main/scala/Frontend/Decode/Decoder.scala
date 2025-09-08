@@ -68,6 +68,7 @@ class Decoder extends Module{
     ))
     io.imm := imm
 
-    io.func := isMem ## (isMuldiv || isPriv) ## !(isMem || isMuldiv || isPriv)
+    val isStream = inst(6,0) === 0x0b.U
+    io.func := isMem ## (isMuldiv || isPriv || isStream) ## !(isMem || isMuldiv || isPriv)
 
 }

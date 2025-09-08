@@ -2,6 +2,14 @@ package ZirconConfig
 import chisel3._
 import chisel3.util._
 
+object Stream {
+    val iterNum   = 8
+    val streamNum = 16
+    val iterBits  = 3
+    val fifoLength = 64
+    val streamBits = log2Ceil(streamNum)
+}
+
 object EXEOp {
     // alu
     val ADD     = 0x0.U(5.W)
@@ -34,6 +42,13 @@ object EXEOp {
     val DIVU    = 0x5.U(4.W)
     val REM     = 0x6.U(4.W)
     val REMU    = 0x7.U(4.W)
+
+    // stream
+    val stInstBits = 2
+    val CFGI = 0x0.U(stInstBits.W)
+    val CFGADDR = 0x1.U(stInstBits.W)
+    val CALSTREAM = 0x2.U(stInstBits.W)
+    val STEPI = 0x3.U(stInstBits.W)
 }
 
 object JumpOp{

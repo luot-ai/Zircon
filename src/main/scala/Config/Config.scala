@@ -4,10 +4,20 @@ import chisel3.util._
 
 object Stream {
     val iterNum   = 8
-    val streamNum = 16
+    val streamNum = 4
     val iterBits  = 3
-    val fifoLength = 64
+    val fifoWord = 32
     val streamBits = log2Ceil(streamNum)
+    val streamCfgBits = 2
+    // bits in stream state
+    val DONECFG = 0
+    val LDSTRAEM = 1
+}
+
+object FifoRole {
+  val Src0 = 0
+  val Src1 = 1
+  val Dst  = 2
 }
 
 object EXEOp {
@@ -46,7 +56,7 @@ object EXEOp {
     // stream
     val stInstBits = 2
     val CFGI = 0x0.U(stInstBits.W)
-    val CFGADDR = 0x1.U(stInstBits.W)
+    val CFGSTREAM = 0x1.U(stInstBits.W)
     val CALSTREAM = 0x2.U(stInstBits.W)
     val STEPI = 0x3.U(stInstBits.W)
 }

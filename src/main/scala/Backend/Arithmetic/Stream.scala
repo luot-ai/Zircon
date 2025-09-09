@@ -3,6 +3,7 @@ import chisel3.util._
 import ZirconConfig.Stream._
 import ZirconConfig.Cache._
 import ZirconConfig.EXEOp._
+import ZirconConfig.FifoRole._
 
 
 
@@ -10,11 +11,12 @@ class SEPipelineIO extends Bundle {
     val op      = Input(UInt(stInstBits.W))
     val src1    = Input(UInt(32.W))
     val src2    = Input(UInt(32.W))
+    val cfgState = Input(UInt(streamCfgBits.W))
 }
 
 
 class StreamEngineIO extends Bundle {
-    val pp  = Decoupled(new SEPipelineIO)
+    val pp  = Flipped(Decoupled(new SEPipelineIO))
     val mem = new MemIO(false)
 }
 
@@ -25,9 +27,10 @@ class StreamEngine extends Module {
 
     val iCntMap = RegInit(VecInit.fill(iterNum)(0.U(32.W)))    //i_id -> itercnt
     val streamMap = RegInit(VecInit.fill(streamNum)(0.U(iterBits.W))) //fifo_id -> i_id
-    val stateCfg = RegInit(VecInit.fill(streamNum)(0.U(33.W))) //fifo_id -> addr,doneCfg
-    val readyMap = RegInit(VecInit.fill(streamNum)(false.B))  //fifo_id,itercnt -> ready
-    val Fifo = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoLength)(0.U(32.W))))  //fifo_id,itercnt -> data
+    val addrCfg = RegInit(VecInit.fill(streamNum)(0.U(32.W))) //fifo_id -> addr
+    val stateCfg = RegInit(VecInit.fill(streamNum)(0.U(streamCfgBits.W))) //fifo_id -> [doneCfg,isLoad,...]
+    val readyMap = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(false.B)))  //fifo_id,itercnt -> ready
+    val Fifo = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(0.U(32.W))))  //fifo_id,itercnt -> data
 
     val ppBits = io.pp.bits
     val op = ppBits.op
@@ -38,16 +41,18 @@ class StreamEngine extends Module {
 
     val isCfgI = op === CFGI && valid
     val isStepI = op === STEPI && valid
-    val isCfgAddr = op === CFGADDR && valid
+    val isCfgStream = op === CFGSTREAM && valid
     val isCal = op === CALSTREAM && valid
 
 
-    val iId = src1
+    val iId = src1(iterBits-1,0)
     val addr = src1
-    val stId = VecInit(src1(streamBits*2-1, streamBits),src1(streamBits-1, 0),src2(streamBits-1, 0))//fifo_src_0 fifo_src_1 fifo_dst
-    val stIter = VecInit.tabulate(3){ j => streamMap(stId(j))}
-    val stIndex   = VecInit.tabulate(3){ j => stIter(j) % fifoLength.U}
+    val fifoId = VecInit(src1(streamBits*2-1, streamBits),src1(streamBits-1, 0),src2(streamBits-1, 0))//fifo_src_0 fifo_src_1 fifo_dst
+    val fifoIter = VecInit.tabulate(3){ j => iCntMap(streamMap(fifoId(j)))}
+    val fifoWordIdx   = VecInit.tabulate(3){ j => (fifoIter(j) % fifoWord.U)(log2Ceil(fifoWord)-1,0)}
+    
 
+    //----------------- 1:CORE -------------------
     //config
     val iMapWen = isCfgI || isStepI
     val iMapWdata = Mux(isCfgI , 0.U(32.W), iCntMap(iId) + 1.U(32.W))
@@ -55,48 +60,107 @@ class StreamEngine extends Module {
         iCntMap(iId) := iMapWdata
     }
     when(isCfgI){
-        streamMap(stId(2)) := iId
+        streamMap(fifoId(Dst)) := iId
     }
-    when(isCfgAddr){
-        stateCfg(stId(2)) := addr ## 1.U(1.W)
+    when(isCfgStream){
+        addrCfg(fifoId(Dst)) := addr 
+        stateCfg(fifoId(Dst)) := ppBits.cfgState
     }
 
     //calculate
-    val srcsRdy = VecInit.tabulate(2){ j=> readyMap(stId(j))(stIndex(j)) }
-    val srcRdy = srcsRdy.asUInt.andR
-    val datas = VecInit.tabulate(2){ j=> Fifo(stId(j))(stIndex(j)) }
-    val res = datas(0) + datas(1)
-    when(isCal){
-        Fifo(stId(2))(stIndex(2)) := res
+    val srcRdy = VecInit.tabulate(2){ j=> readyMap(fifoId(j))(fifoWordIdx(j)) }.asUInt.andR //src0 src1 has data
+    val dstRdy = !readyMap(fifoId(Dst))(fifoWordIdx(Dst)) //dst has space to write
+    val datas = VecInit.tabulate(2){ j=> Fifo(fifoId(j))(fifoWordIdx(j)) }
+    val res = datas(Src0) + datas(Src1)
+    when(isCal && srcRdy && dstRdy ){
+        Fifo(fifoId(Dst))(fifoWordIdx(Dst)) := res
+        for(i <- 0 until 3){
+            readyMap(fifoId(i))(fifoWordIdx(i)) := !readyMap(fifoId(i))(fifoWordIdx(i))
+        }
     }
-    io.pp.ready := srcRdy
+    io.pp.ready := srcRdy && dstRdy
 
 
-    //-----------------from AXI-------------------
-    // val rbuf     = RegInit(0.U(l2LineBits.W))
-    // when(io.mem.rreq && io.mem.rrsp){
-    //     rbuf := io.mem.rdata ## rbuf(l2LineBits-1, 32)
-    // }
-    val rMemCnt     = RegInit(0.U((l2Offset-2).W))
+    //----------------- 2:MEMORY -------------------
+    val l2LineWord = l2Line >> 2
+    val fifoSegNum = fifoWord / l2LineWord //FIFO大小= fifoSegNum * l2LineWord * 4B
+    val axiLen = (l2LineBits / 32 - 1).U
+    val axiSize = 2.U
+
+    //----------------- 2.1:READ -------------------
+    // fifoSegEmpty：Vec[streamNum,Vec(fifoSegNum,bool())]
+    val fifoSegEmpty = VecInit.tabulate(streamNum){j=>
+        VecInit.tabulate(fifoSegNum){k=>
+            !readyMap(j).slice(k*l2LineWord, (k+1)*l2LineWord).reduce(_ || _)  &&  stateCfg(j)(LDSTRAEM) && stateCfg(j)(DONECFG)
+        }
+    }
+    // loadPerSegSel：Seq[(valid: Bool, chosenStreamIdx: UInt)]
+    val loadPerSegSel = (0 until fifoSegNum).map { segIdx =>
+        val conds = (0 until streamNum).map { fifoId =>
+        fifoSegEmpty(fifoId)(segIdx) -> fifoId.U
+        }
+        val selFifo = PriorityMux(conds) // 这一段里最小的 stream index
+        val valid = VecInit.tabulate(streamNum)(j => fifoSegEmpty(j)(segIdx)).asUInt.orR
+        (valid, selFifo)
+    }
+    // select fifo to fetch from AXI
+    val loadSegValids = VecInit(loadPerSegSel.map(_._1))        // 每个 segment 是否有有效 fifo
+    val loadSegFifoIds = VecInit(loadPerSegSel.map(_._2))       // 每个 segment 对应的被选 stream idx
+    val loadSegSel = PriorityEncoder(loadSegValids)
+    val loadFifoId = loadSegFifoIds(loadSegSel)
+    val loadValid = loadSegValids.asUInt.orR
+    io.mem.rreq      := loadValid
+    io.mem.raddr     := addrCfg(loadFifoId)
+    io.mem.rlen      := axiLen
+    io.mem.rsize     := axiSize
+    // refill FIFO
+    val loadWordCnt     = RegInit(0.U((l2Offset-2).W)) // word cnt
     when(io.mem.rreq && io.mem.rrsp){
-        rMemCnt := rMemCnt + 1.U
+        loadWordCnt := loadWordCnt + 1.U
     }
-    val wFifoId     = RegInit(0.U(streamBits.W))
+    val loadFifoIdReg     = RegInit(0.U(streamBits.W))
+    val loadSegSelReg     = RegInit(0.U(log2Ceil(fifoSegNum).W))
+    when(io.mem.rreq && io.mem.rrsp && !loadWordCnt.orR){
+        loadFifoIdReg := loadFifoId
+        loadSegSelReg := loadSegSel
+    } 
     val wFifoWen    = io.mem.rreq && io.mem.rrsp
     val wFifoData   = io.mem.rdata
-    // val wFifoIndex  = 
+    val wFifoIdx  = loadSegSelReg * l2LineWord.U + loadWordCnt 
+println(s"wFifoIdx width = ${wFifoIdx.getWidth}")
+println(s"loadSegSelReg width = ${loadSegSelReg.getWidth}")
+println(s"l2LineWord.U width = ${(l2LineWord.U).getWidth}")
+println(s"loadWordCnt width = ${loadWordCnt.getWidth}")
 
-    //-----------------To AXI-------------------
 
-    // io.mem.rreq      := fsmC2.io.mem.rreq
-    // io.mem.raddr     := tag(c2s3.paddr) ## index(c2s3.paddr) ## Mux(c2s3.uncache, offset(c2s3.paddr), 0.U(l2Offset.W))
-    // io.mem.rlen      := Mux(c2s3.uncache, 0.U, (l2LineBits / 32 - 1).U)
-    // io.mem.rsize     := Mux(c2s3.uncache, c2s3.mtype, 2.U)
-    // io.mem.wreq.get  := fsmC2.io.mem.wreq.get
-    // io.mem.wlast.get := fsmC2.io.mem.wlast.get
-    // io.mem.waddr.get := wbufC2.paddr(31, 2) ## 0.U(2.W)
-    // io.mem.wdata.get := (wbufC2.wdata(31, 0) << (wbufC2.paddr(1, 0) << 3))
-    // io.mem.wlen.get  := Mux(c2s3.uncache, 0.U, (l2LineBits / 32 - 1).U)
-    // io.mem.wsize.get := 2.U
-    // io.mem.wstrb.get := Mux(c2s3.uncache, mtype << wbufC2.paddr(1, 0), 0xf.U)
+    when(wFifoWen) {
+        Fifo(loadFifoIdReg)(wFifoIdx) := wFifoData
+        readyMap(loadFifoIdReg)(wFifoIdx) := true.B
+    }
+
+    //----------------- 2.2:WRITE -------------------
+    val storeFifoId = 2
+
+    val wFifoSegFull = VecInit.tabulate(fifoSegNum){ k=> readyMap(storeFifoId).slice(k*l2LineWord, (k+1)*l2LineWord).reduce(_ && _) }
+    val storeSegSel = PriorityEncoder(wFifoSegFull)
+    val storeValid = stateCfg(storeFifoId)(DONECFG) && !stateCfg(storeFifoId)(LDSTRAEM) && wFifoSegFull.asUInt.orR
+    
+    io.mem.wreq.get  := storeValid
+    io.mem.waddr.get := addrCfg(storeFifoId)
+    io.mem.wlen.get  := axiLen
+    io.mem.wsize.get := axiSize
+    io.mem.wstrb.get := 0xf.U
+    // write Mem
+    val storeWordCnt   = RegInit(0.U((l2Offset-2).W))
+    val storeSegSelReg = RegInit(0.U(log2Ceil(fifoSegNum).W))
+    val storeFifoIdx  = storeSegSelReg * l2LineWord.U + storeWordCnt 
+    io.mem.wlast.get := storeWordCnt.andR
+    io.mem.wdata.get := Fifo(storeFifoId)(storeFifoIdx)
+    when(io.mem.wreq.get && io.mem.wrsp.get && !storeWordCnt.orR){
+        storeSegSelReg := storeSegSel
+    } 
+    when (io.mem.wreq.get && io.mem.wrsp.get){
+        storeWordCnt := storeWordCnt + 1.U
+        readyMap(storeFifoId)(storeFifoIdx):=false.B
+    }
 }

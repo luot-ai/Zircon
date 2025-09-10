@@ -37,6 +37,7 @@ class BackendCommitIO extends Bundle {
 
 class BackendMemoryIO extends Bundle {
     val l2 = Flipped(new L2DCacheIO)
+    val stream = new MemIO(false)
 }
 class BackendDBGIO extends Bundle {
     val rf   = new RegfileDBGIO
@@ -162,7 +163,7 @@ class Backend extends Module {
     )
     rplyBus := lsPP.io.wk.rplyOut
     io.mem.l2 <> lsPP.io.mem.l2
-
+    io.mem.stream <> mdPP.io.streamMem
     io.dsp.wakeBus := wakeBus(0)
     io.dsp.rplyBus := rplyBus
 

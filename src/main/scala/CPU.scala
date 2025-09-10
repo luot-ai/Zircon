@@ -40,6 +40,7 @@ class CPU(sim: Boolean = false) extends Module {
     fte.io.mem.l2 <> l2.io.ic
     bke.io.mem.l2 <> l2.io.dc
     arb.io.l2  <> l2.io.mem
+    arb.io.stream <> bke.io.mem.stream
     arb.io.axi <> io.axi
 
 

@@ -145,6 +145,7 @@ class Frontend extends Module {
         pkg.op      := dcd.op
         pkg.imm     := dcd.imm
         pkg.func    := dcd.func
+        pkg.sinfo   := dcd.sinfo
     }
     // io.bke.rf.pra := rnm.io.fte.pra
     val instPkgDSP = WireDefault(ShiftRegister(

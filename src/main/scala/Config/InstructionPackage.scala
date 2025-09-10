@@ -22,6 +22,7 @@ class FrontendPackage extends Bundle {
     val func       = UInt(niq.W)
     val rinfo      = new RegisterInfo()
     val pinfo      = new PRegisterInfo()
+    val sinfo      = new StreamInfo()
 }
 
 class BackendPackage extends Bundle {
@@ -53,6 +54,7 @@ class BackendPackage extends Bundle {
     val exception  = UInt(8.W)
     val result     = UInt(32.W)
     val nxtCmtEn   = Bool()
+    val sinfo      = new StreamInfo()
     
     def apply(fte: FrontendPackage, robIdx: ClusterEntry, bdbIdx: ClusterEntry, prjInfo: ReadyBoardEntry, prkInfo: ReadyBoardEntry): BackendPackage = {
         val bke = WireDefault(0.U.asTypeOf(new BackendPackage))
@@ -64,6 +66,7 @@ class BackendPackage extends Bundle {
         bke.rdVld      := fte.rinfo.rdVld
         bke.op         := fte.op(6, 0)
         bke.imm        := fte.imm
+        bke.sinfo      := fte.sinfo
         bke.robIdx     := robIdx
         bke.bdbIdx     := bdbIdx
         bke.prjWk      := prjInfo.ready && fte.pinfo.prjWk

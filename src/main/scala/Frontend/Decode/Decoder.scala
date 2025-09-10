@@ -3,6 +3,12 @@ import chisel3.util._
 import ZirconConfig.EXEOp._
 import ZirconConfig.Issue._
 import ZirconUtil._
+import ZirconConfig.Stream._
+
+class StreamInfo extends Bundle{
+    val op = Output(UInt(stInstBits.W))
+    val state = Output(Vec(streamCfgBits,Bool()))
+}
 
 class DecoderIO extends Bundle{
     val inst    = Input(UInt(32.W))
@@ -10,6 +16,7 @@ class DecoderIO extends Bundle{
     val op      = Output(UInt(7.W))
     val imm     = Output(UInt(32.W))
     val func    = Output(UInt(niq.W))
+    val sinfo  = Output(new StreamInfo())
 }
 
 class Decoder extends Module{
@@ -31,6 +38,7 @@ class Decoder extends Module{
     val isStore      = inst(6, 0) === 0x23.U || isAtom && inst(31, 27) === 0x03.U
     val isMem        = isLoad || isStore
     val isMuldiv     = inst(6, 0) === 0x33.U && funct7(0) === 1.U
+    val isStream     = inst(6,0) === 0x0b.U
 
     /* op: 
         bit6: indicates src1 source, 0-reg 1-pc, or indicates store, 1-store, 0-not
@@ -68,7 +76,9 @@ class Decoder extends Module{
     ))
     io.imm := imm
 
-    val isStream = inst(6,0) === 0x0b.U
     io.func := isMem ## (isMuldiv || isPriv || isStream) ## !(isMem || isMuldiv || isPriv)
 
+    io.sinfo.op := funct3(stInstBits-1,0)
+    io.sinfo.state(DONECFG) := isStream
+    io.sinfo.state(LDSTRAEM) := funct3(stInstBits)
 }

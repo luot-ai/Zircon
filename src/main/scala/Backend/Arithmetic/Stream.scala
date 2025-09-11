@@ -81,7 +81,7 @@ class StreamEngine extends Module {
             readyMap(fifoId(i))(fifoWordIdx(i)) := !readyMap(fifoId(i))(fifoWordIdx(i))
         }
     }
-    io.pp.busy := !(srcRdy && dstRdy) && io.pp.valid
+    io.pp.busy := !(srcRdy && dstRdy) && isCal
 
     //----------------- 2:MEMORY -------------------
     val l2LineWord = l2Line >> 2

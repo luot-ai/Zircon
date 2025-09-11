@@ -3,6 +3,7 @@ import chisel3.util._
 import ZirconUtil._
 import ZirconConfig.Fetch._
 import ZirconConfig.JumpOp._
+import ZirconConfig.EXEOp._
 
 /* Pre-Decoder: 
     In order to shorten the frontend pipleline, we need to decode the instruction
@@ -39,7 +40,7 @@ class PreDecoder extends Module {
 
     val isStream = inst(6,0)===0x0b.U//0001011
     val funct3 = inst(14,12) 
-    val stRkVld = isStream && funct3(2)
+    val stRkVld = isStream && (funct3 === CFGI || funct3 === CALSTREAM || funct3 === CFGSTREAM)
 
     // rd
     val rdVld = (inst(3, 0) === 0x3.U && !(

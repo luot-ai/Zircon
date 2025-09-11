@@ -50,7 +50,7 @@ class MulDivPipeline extends Module {
 
     /* Issue Stage */
     val instPkgIs = WireDefault(io.iq.instPkg.bits)
-    io.iq.instPkg.ready := !div.io.busy && !streamBusy
+    io.iq.instPkg.ready := !(div.io.busy || streamBusy)
 
     def segFlush(instPkg: BackendPackage): Bool = {
         io.cmt.flush || io.wk.rplyIn.replay && (instPkg.prjLpv | instPkg.prkLpv).orR
@@ -64,7 +64,7 @@ class MulDivPipeline extends Module {
         Mux(segFlush(io.iq.instPkg.bits) || instPkgRFReplay && (div.io.busy || streamBusy), 0.U.asTypeOf(new BackendPackage), instPkgIs), 
         1, 
         0.U.asTypeOf(new BackendPackage), 
-        io.cmt.flush || !div.io.busy || instPkgRFReplay || !streamBusy
+        io.cmt.flush || !(div.io.busy || streamBusy) || instPkgRFReplay 
     ))
     instPkgRFReplay := segFlush(instPkgRF)
     io.rf.rd.prj    := instPkgRF.prj
@@ -77,7 +77,7 @@ class MulDivPipeline extends Module {
         Mux(segFlush(instPkgRF), 0.U.asTypeOf(new BackendPackage), instPkgRF), 
         1, 
         0.U.asTypeOf(new BackendPackage), 
-        io.cmt.flush || !div.io.busy ||  !streamBusy
+        io.cmt.flush || !(div.io.busy || streamBusy)
     ))
 
     // multiply
@@ -111,7 +111,7 @@ class MulDivPipeline extends Module {
         Mux(io.cmt.flush, 0.U.asTypeOf(new BackendPackage), instPkgEX1), 
         1, 
         0.U.asTypeOf(new BackendPackage), 
-        io.cmt.flush || !div.io.busy || !streamBusy
+        io.cmt.flush || !(div.io.busy || streamBusy)
     ))
 
     /* Execute Stage 3 */
@@ -119,7 +119,7 @@ class MulDivPipeline extends Module {
         Mux(io.cmt.flush, 0.U.asTypeOf(new BackendPackage), instPkgEX2), 
         1, 
         0.U.asTypeOf(new BackendPackage), 
-        io.cmt.flush || !div.io.busy || !streamBusy
+        io.cmt.flush || !(div.io.busy || streamBusy)
     ))
     val instPkgEX3ForWakeup = WireDefault(instPkgEX3)
     instPkgEX3ForWakeup.prd := Mux(div.io.busy || streamBusy, 0.U, instPkgEX3.prd)

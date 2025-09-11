@@ -42,10 +42,10 @@ class PreDecoder extends Module {
     val stRkVld = isStream && funct3(2)
 
     // rd
-    val rdVld = inst(3, 0) === 0x3.U && !(
+    val rdVld = (inst(3, 0) === 0x3.U && !(
         inst(6, 4) === 0x6.U || // store
         inst(6, 4) === 0x2.U    // branch
-    ) || inst(2, 0) === 0x7.U || !isStream
+    ) || inst(2, 0) === 0x7.U) && !isStream
 
     val rd = inst(11, 7)
     io.rinfo.rdVld := Mux(rd === 0.U, false.B, rdVld)

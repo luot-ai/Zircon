@@ -33,6 +33,7 @@ class StreamEngine extends Module {
     val stateCfg = RegInit(VecInit.fill(streamNum)(VecInit.fill(streamCfgBits)(false.B))) //fifo_id -> [doneCfg,isLoad,...]
     val readyMap = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(false.B)))  //fifo_id,itercnt -> ready
     val Fifo = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(0.U(32.W))))  //fifo_id,itercnt -> data
+    val lengthMap = RegInit(VecInit.fill(streamNum)(true.B)) 
 
     val ppBits = io.pp
     val op = ppBits.op
@@ -92,7 +93,7 @@ class StreamEngine extends Module {
     // fifoSegEmpty：Vec[streamNum,Vec(fifoSegNum,bool())]
     val fifoSegEmpty = VecInit.tabulate(streamNum){j=>
         VecInit.tabulate(fifoSegNum){k=>
-            !readyMap(j).slice(k*l2LineWord, (k+1)*l2LineWord).reduce(_ || _)  &&  stateCfg(j)(LDSTRAEM) && stateCfg(j)(DONECFG)
+            !readyMap(j).slice(k*l2LineWord, (k+1)*l2LineWord).reduce(_ || _)  &&  stateCfg(j)(LDSTRAEM) && stateCfg(j)(DONECFG) && lengthMap(j) 
         }
     }
     // loadPerSegSel：Seq[(valid: Bool, chosenStreamIdx: UInt)]
@@ -132,6 +133,7 @@ class StreamEngine extends Module {
     when(wFifoWen) {
         Fifo(loadFifoIdReg)(wFifoIdx) := wFifoData
         readyMap(loadFifoIdReg)(wFifoIdx) := true.B
+        lengthMap(loadFifoIdReg):= false.B
     }
 
     //----------------- 2.2:WRITE -------------------

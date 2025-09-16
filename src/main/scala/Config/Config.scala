@@ -6,7 +6,7 @@ object Stream {
     val iterNum   = 8
     val streamNum = 4
     val iterBits  = 3
-    val fifoWord = 32
+    val fifoWord  = 2 * Cache.l2LineWord
     val streamBits = log2Ceil(streamNum)
     // bits in stream state
     val DONECFG = 0
@@ -161,6 +161,7 @@ object Cache{
     val l2Way         = 2 * l1Way
     val l2Line        = (1 << l2Offset)
     val l2LineBits    = l2Line * 8
+    val l2LineWord = l2Line >> 2
 }
 object TLB{
     val ENTRYNUM = 16

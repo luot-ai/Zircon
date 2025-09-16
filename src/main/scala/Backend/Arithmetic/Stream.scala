@@ -34,7 +34,6 @@ class StreamEngine extends Module {
     val readyMap = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(false.B)))  //fifo_id,itercnt -> ready
     val Fifo = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(0.U(32.W))))  //fifo_id,itercnt -> data
 
-    val l2LineWord = l2Line >> 2
     val maxWordLength = 512
     val lengthBits = log2Ceil(maxWordLength/l2LineWord) + 1
     val tmplengthMap  = RegInit(VecInit.fill(streamNum)(0.U(lengthBits.W))) //TODO 0->1->2->3 GG 64word
@@ -45,12 +44,10 @@ class StreamEngine extends Module {
     val src2 = ppBits.src2
     val valid = io.pp.valid
 
-
     val isCfgI = op === CFGI && valid
     val isStepI = op === STEPI && valid
     val isCfgStream = op === CFGSTREAM && valid
     val isCal = op === CALSTREAM && valid
-
 
     val iId = src1(iterBits-1,0)
     val addr = src1

@@ -34,7 +34,10 @@ class StreamEngine extends Module {
     val readyMap = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(false.B)))  //fifo_id,itercnt -> ready
     val Fifo = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(0.U(32.W))))  //fifo_id,itercnt -> data
 
-    val tmplengthMap  = RegInit(VecInit.fill(streamNum)(0.U(3.W))) //TODO 0->1->2->3 GG 64word
+    val l2LineWord = l2Line >> 2
+    val maxWordLength = 512
+    val lengthBits = log2Ceil(maxWordLength/l2LineWord) + 1
+    val tmplengthMap  = RegInit(VecInit.fill(streamNum)(0.U(lengthBits.W))) //TODO 0->1->2->3 GG 64word
 
     val ppBits = io.pp
     val op = ppBits.op
@@ -89,7 +92,6 @@ class StreamEngine extends Module {
     io.pp.busy := !(srcRdy && dstRdy) && isCal
 
     //----------------- 2:MEMORY -------------------
-    val l2LineWord = l2Line >> 2
     val fifoSegNum = fifoWord / l2LineWord //FIFO大小= fifoSegNum * l2LineWord * 4B
     val axiLen = (l2LineBits / 32 - 1).U
     val axiSize = 2.U
@@ -98,7 +100,7 @@ class StreamEngine extends Module {
     // fifoSegEmpty：Vec[streamNum,Vec(fifoSegNum,bool())]
     val fifoSegEmpty = VecInit.tabulate(streamNum){j=>
         VecInit.tabulate(fifoSegNum){k=>
-            !readyMap(j).slice(k*l2LineWord, (k+1)*l2LineWord).reduce(_ || _)  &&  stateCfg(j)(LDSTRAEM) && stateCfg(j)(DONECFG)  && (tmplengthMap(j)(0)===k.U && !tmplengthMap(j)(2))//TODO
+            !readyMap(j).slice(k*l2LineWord, (k+1)*l2LineWord).reduce(_ || _)  &&  stateCfg(j)(LDSTRAEM) && stateCfg(j)(DONECFG)  && (tmplengthMap(j)(0)===k.U && !tmplengthMap(j)(lengthBits-1))//TODO
         }
     }
     //TODO 只使用两个load stream目前

@@ -16,10 +16,14 @@ normal：{Total cycles: 958, Total insts: 533}
 
 1. 完成debug64 word，使两个stream交叠
 
+## 0916
 ### 9：30
-2. 扩展使支持512word
-3. profiling
-   1. 需要run 10 times？：容量不命中
-   2. 看普通程序慢的原因
-   3. 增大linewidth?好像不公平
-4. 前端指令
+1. 512word add：
+   1. A先取两次：{Total cycles: 1790, Total insts: 2081} 
+   2. A1B1：{Total cycles: 1832, Total insts: 2080,}
+
+2. 512word 32word/line：{Total cycles: 1685, Total insts: 2080}
+
+3. 完成梳理   
+### 16：42
+

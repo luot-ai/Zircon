@@ -30,12 +30,15 @@ class StreamEngine extends Module {
     val iCntMap = RegInit(VecInit.fill(iterNum)(0.U(32.W)))    //i_id -> itercnt
     val streamMap = RegInit(VecInit.fill(streamNum)(0.U(iterBits.W))) //fifo_id -> i_id
     val addrCfg = RegInit(VecInit.fill(streamNum)(0.U(32.W))) //fifo_id -> addr
+    val addrDyn = RegInit(VecInit.fill(streamNum)(0.U(32.W))) //fifo_id -> addr
     val stateCfg = RegInit(VecInit.fill(streamNum)(VecInit.fill(streamCfgBits)(false.B))) //fifo_id -> [doneCfg,isLoad,...]
     val readyMap = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(false.B)))  //fifo_id,itercnt -> ready
     val Fifo = RegInit(VecInit.fill(streamNum)(VecInit.fill(fifoWord)(0.U(32.W))))  //fifo_id,itercnt -> data
 
-    val lengthMap = RegInit(VecInit.fill(streamNum)(0.U(32.W))) //fifo_id -> length
-    val loadCntMap = RegInit(VecInit.fill(streamNum)(0.U(32.W))) //fifo_id -> cnt
+    val lengthMap = RegInit(VecInit.fill(streamNum)(0.U(16.W))) //fifo_id -> load length
+    val burstCntMap = RegInit(VecInit.fill(streamNum)(0.U(16.W))) //fifo_id -> load cnt
+    val outerIterMap = RegInit(VecInit.fill(streamNum)(0.U(16.W))) //fifo_id -> outer Iter
+    val oIterCntMap = RegInit(VecInit.fill(streamNum)(0.U(16.W))) //fifo_id -> outer Iter cnt
 
     val ppBits = io.pp
     val op = ppBits.op
@@ -50,6 +53,8 @@ class StreamEngine extends Module {
 
     val iId = src1(iterBits-1,0)
     val addr = src1
+    val cfgLength = src1(31,16)
+    val outerIter = src1(15,0)
     val fifoId = VecInit(src1(streamBits*2-1, streamBits),src1(streamBits-1, 0),src2(streamBits-1, 0))//fifo_src_0 fifo_src_1 fifo_dst
     val fifoIter = VecInit.tabulate(3){ j => iCntMap(streamMap(fifoId(j)))}
     val fifoWordIdx   = VecInit.tabulate(3){ j => (fifoIter(j) % fifoWord.U)(log2Ceil(fifoWord)-1,0)}
@@ -57,17 +62,18 @@ class StreamEngine extends Module {
 
     //----------------- 1:CORE -------------------
     //config
-    val iMapWen = isCfgI || isStepI
-    val iMapWdata = Mux(isCfgI , 0.U(32.W), iCntMap(iId) + 1.U(32.W))
-    when(iMapWen){
-        iCntMap(iId) := iMapWdata
+    when(isStepI){
+        iCntMap(iId) := iCntMap(iId) + 1.U(32.W)
     }
     when(isCfgI){
+        iCntMap(0) := 0.U
         streamMap(fifoId(Dst)) := 0.U
-        lengthMap(fifoId(Dst)) := src1 / l2LineWord.U
+        lengthMap(fifoId(Dst)) := cfgLength / l2LineWord.U
+        outerIterMap(fifoId(Dst)) := outerIter
     }
     when(isCfgStream){
         addrCfg(fifoId(Dst)) := addr 
+        addrDyn(fifoId(Dst)) := addr 
         stateCfg(fifoId(Dst)) := ppBits.cfgState
     }
 
@@ -83,7 +89,7 @@ class StreamEngine extends Module {
             readyMap(fifoId(i))(fifoWordIdx(i)) := !readyMap(fifoId(i))(fifoWordIdx(i))
         }
         dbgCnt := dbgCnt + 1.U
-        printf(p" dbgCnt=$dbgCnt \n")
+        //printf(p" dbgCnt=$dbgCnt \n")
         // printf(p"CAL FIFO | ${datas(0)} | ${datas(1)} | res=$res \n")
     }
     io.pp.busy := !(srcRdy && dstRdy) && isCal
@@ -99,15 +105,15 @@ class StreamEngine extends Module {
         VecInit.tabulate(fifoSegNum){k=>
             !readyMap(j).slice(k*l2LineWord, (k+1)*l2LineWord).reduce(_ || _)  &&  
             stateCfg(j)(LDSTRAEM) && stateCfg(j)(DONECFG)  && 
-            (loadCntMap(j)(0)===k.U && loadCntMap(j)=/=lengthMap(j))
+            (burstCntMap(j)(0)===k.U && oIterCntMap(j)=/=outerIterMap(j))
         }
     }
     //TODO 只使用两个load stream目前
     val fifo0Valid = fifoSegEmpty(0).asUInt.orR
     val fifo1Valid = fifoSegEmpty(1).asUInt.orR
     val loadValid  = fifo0Valid | fifo1Valid
-    val loadFifoId = Mux(fifo1Valid && (loadCntMap(1)<loadCntMap(0)), 1.U ,0.U)
-    val loadSegSel = Mux(fifo1Valid && (loadCntMap(1)<loadCntMap(0)), fifoSegEmpty(1).asUInt-1.U  , fifoSegEmpty(0).asUInt-1.U)
+    val loadFifoId = Mux(fifo1Valid && (burstCntMap(1)<burstCntMap(0)), 1.U ,0.U)
+    val loadSegSel = Mux(fifo1Valid && (burstCntMap(1)<burstCntMap(0)), fifoSegEmpty(1).asUInt-1.U  , fifoSegEmpty(0).asUInt-1.U)
 
     // loadPerSegSel：Seq[(valid: Bool, chosenStreamIdx: UInt)]
     // val loadPerSegSel = (0 until fifoSegNum).map { segIdx =>
@@ -140,11 +146,20 @@ class StreamEngine extends Module {
         loadSegSelReg := loadSegSel
     }.elsewhen(io.mem.rreq && io.mem.rrsp && io.mem.rlast){
         loadValidReg := false.B
-        loadCntMap(loadFifoIdReg):= loadCntMap(loadFifoIdReg) + 1.U
-        addrCfg(loadFifoIdReg) := addrCfg(loadFifoIdReg) + l2Line.U
+        // burstCntMap(loadFifoIdReg):= burstCntMap(loadFifoIdReg) + 1.U
+        // addrDyn(loadFifoIdReg) := addrDyn(loadFifoIdReg) + l2Line.U
+
+        val isWrap = (burstCntMap(loadFifoIdReg) + 1.U) % lengthMap(loadFifoIdReg) === 0.U
+        when(isWrap)
+        {
+            //printf(p"id=$loadFifoIdReg, burstCnt=$burstCntMap, oIterCntMap=$oIterCntMap, outerIterMap=$outerIterMap\n")
+            oIterCntMap(loadFifoIdReg) :=oIterCntMap(loadFifoIdReg) + 1.U
+        }
+        addrDyn(loadFifoIdReg)     := Mux(isWrap, addrCfg(loadFifoIdReg), addrDyn(loadFifoIdReg) + l2Line.U)
+        burstCntMap(loadFifoIdReg)  := burstCntMap(loadFifoIdReg) + 1.U
     }
     io.mem.rreq      := loadValidReg
-    io.mem.raddr     := addrCfg(loadFifoIdReg)
+    io.mem.raddr     := addrDyn(loadFifoIdReg)
     io.mem.rlen      := axiLen
     io.mem.rsize     := axiSize
 
@@ -173,18 +188,21 @@ class StreamEngine extends Module {
     when (io.mem.wreq.get && io.mem.wrsp.get){
         storeWordCnt := storeWordCnt + 1.U
         readyMap(storeFifoId)(storeFifoIdx):=false.B
-        addrCfg(storeFifoId) := addrCfg(storeFifoId) + l2Line.U
-        printf(p"STORE FIFO | id = $storeFifoId | idx = $storeFifoIdx | value = ${io.mem.wdata.get}\n")
+        //printf(p"STORE FIFO | id = $storeFifoId | idx = $storeFifoIdx | value = ${io.mem.wdata.get}\n")
     }
     when(!storeValidReg){
         storeValidReg  := storeValid
         storeSegSelReg := storeSegSel
     }.elsewhen(io.mem.wreq.get && io.mem.wrsp.get && io.mem.wlast.get){
         storeValidReg := false.B
+        val isWrap = (burstCntMap(2) + 1.U) === lengthMap(2) 
+        addrDyn(2)     := Mux(isWrap, addrCfg(2), addrDyn(2) + l2Line.U)
+        burstCntMap(2) := Mux(isWrap, 0.U, burstCntMap(2) + 1.U)
+        oIterCntMap(2) := Mux(isWrap, oIterCntMap(2) + 1.U, oIterCntMap(2))
     }
     // write Mem
     io.mem.wreq.get  := storeValidReg
-    io.mem.waddr.get := addrCfg(storeFifoId)
+    io.mem.waddr.get := addrDyn(storeFifoId)
     io.mem.wlen.get  := axiLen
     io.mem.wsize.get := axiSize
     io.mem.wstrb.get := 0xf.U

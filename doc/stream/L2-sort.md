@@ -5,8 +5,8 @@
 ### 1. 文档说明结果
 
 ### 2. 测试
-1. 需要run 10 times？：使其容量不命中
-2. 增大linewidth?好像不公平
+1. outer 20 times 会有bug
+2. 整理数据
    
 ### 3. 开发
 1. coding
@@ -40,9 +40,7 @@
    3. 发射
       1. 获取 index
       2. 检查buffer对应项是否就绪
-   4. 读操作数
-      1. 
-   5. 执行
+   4. 执行
       1. Readop：从buffer/寄存器中对应项取数
       2. 计算
       3. writeback：写buffer/寄存器
@@ -69,3 +67,8 @@ normal：{Total cycles: 958, Total insts: 533}
 ### 512word
 custom：{Total cycles: 1832, Total insts: 2080}
 normal：{Total cycles: 6844, Total insts: 4120}
+
+### 512word-20time 
+custom：{Total cycles: 33000, Total insts: 41056}
+normal：{Total cycles: 137500, Total insts: 82046}
+加速比 = 4.16

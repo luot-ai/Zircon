@@ -166,3 +166,10 @@ object Cache{
 object TLB{
     val ENTRYNUM = 16
 }
+
+object AXIRDVEC{
+    val NONE = 0.U
+    val STREAM = 1.U
+    val INST = 2.U
+    val DATA = 4.U
+}

@@ -1,5 +1,14 @@
 import chisel3._
 import chisel3.util._
+import ZirconConfig.AXIRDVEC._
+
+
+
+class AXIDebugIO extends Bundle {
+    val rdVldVec  = Output(UInt(3.W))
+    val rdDoneVec = Output(UInt(3.W))
+    val Cycles = Output(UInt(32.W))
+}
 
 class AXIIO extends Bundle {
     val araddr  = Output(UInt(32.W))
@@ -42,6 +51,7 @@ class AXIArbiterIO extends Bundle {
     val stream = Flipped(new MemIO(false))
     // for Main Memory
     val axi = new AXIIO
+    val dbg = new AXIDebugIO
 }
 
 class AXIArbiter extends Module{
@@ -66,6 +76,12 @@ class AXIArbiter extends Module{
     io.axi.arvalid := false.B
     io.axi.rready  := false.B
 
+    val rdDone = RegInit(NONE) // 先定义默认值
+    val cycleReg = RegInit(0.U(32.W))
+    io.dbg.rdVldVec := NONE
+    io.dbg.rdDoneVec := rdDone
+    io.dbg.Cycles := cycleReg
+
     // read FSM
     val rIdle :: rIar :: rIr :: rDar :: rDr :: rSar :: rSr :: Nil = Enum(7)
 
@@ -74,6 +90,7 @@ class AXIArbiter extends Module{
         is(rIdle){
             // idle state
             rState := Mux(io.stream.rreq, rSar, Mux( io.l2(1).rreq, rDar, Mux(io.l2(0).rreq, rIar, rIdle) ))
+            io.dbg.rdVldVec := Mux(io.stream.rreq, STREAM, Mux( io.l2(1).rreq, DATA, Mux(io.l2(0).rreq, INST, NONE) )) 
         }
         is(rIar){
             // icache ar shake hand state
@@ -121,6 +138,22 @@ class AXIArbiter extends Module{
             rState          := Mux(io.axi.rvalid && io.axi.rlast && io.axi.rready, rIdle, rSr)
         }
     }
+
+
+    // 默认值保持不变
+    rdDone := NONE
+    // 只有在特定状态且 AXI handshake 完成时更新
+    switch(rState) {
+      is(rIr) { when(io.axi.rvalid && io.axi.rlast && io.axi.rready) { rdDone := INST } }
+      is(rDr) { when(io.axi.rvalid && io.axi.rlast && io.axi.rready) { rdDone := DATA } }
+      is(rSr) { when(io.axi.rvalid && io.axi.rlast && io.axi.rready) { rdDone := STREAM } }
+    }
+    when (rState === rIdle) {
+      cycleReg := 0.U
+    } .otherwise {
+      cycleReg := cycleReg + 1.U
+    }
+
 
     // write FSM
     val wIdle :: wDaw :: wDw :: wDb :: wSaw :: wSw :: wSb :: Nil = Enum(7)

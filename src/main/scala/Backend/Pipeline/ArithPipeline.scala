@@ -146,6 +146,7 @@ class ArithPipeline extends Module {
     io.fwd.src1Fwd.ready := DontCare
     io.fwd.src2Fwd.ready := DontCare 
 
+    instPkgEX.d2Cycle := cycleReg
     /* Write Back Stage */
     val instPkgWB = WireDefault(ShiftRegister(
         Mux(io.cmt.flush, 0.U.asTypeOf(new BackendPackage), instPkgEX), 

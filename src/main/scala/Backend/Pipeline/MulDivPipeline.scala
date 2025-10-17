@@ -110,6 +110,7 @@ class MulDivPipeline extends Module {
     io.fwd.src1Fwd.ready := DontCare
     io.fwd.src2Fwd.ready := DontCare
 
+    instPkgEX1.d2Cycle := cycleReg
     /* Execute Stage 2 */
     val instPkgEX2 = WireDefault(ShiftRegister(
         Mux(io.cmt.flush, 0.U.asTypeOf(new BackendPackage), instPkgEX1), 

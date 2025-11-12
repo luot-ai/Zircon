@@ -33,6 +33,16 @@ class Dispatch extends Module {
     val cycleReg = RegInit(0.U(64.W))
     cycleReg     := cycleReg + 1.U
 
+    // TODO
+    for (i <- 0 until ndcd) {
+      io.seRIter.fireStream(i) := io.fte.instPkg(i).bits.isCalStream && io.cmt.rob.enq(i).fire()
+    }     
+    val seIter = WireInit(VecInit.fill(ndcd)(0.U(32.W)))
+    seIter(0) := io.seRIter.iterCnt
+    for (i <- 1 until ndcd) {
+      seIter(i) := Mux(io.seRIter.fireStream(i), seIter(i-1) + 1.U, seIter(i-1))
+    } 
+
     // ready board
     rboard.io.pinfo   := io.fte.instPkg.map(_.bits.pinfo)
     rboard.io.wakeBus := io.bke.wakeBus
@@ -40,7 +50,7 @@ class Dispatch extends Module {
     rboard.io.flush   := io.cmt.flush
 
     val ftePkg = VecInit.tabulate(ndcd){ i =>  
-        val iter = 0.U//TODO：正确的iter值
+        val iter = seIter(i) //TODO
         (new BackendPackage)(io.fte.instPkg(i).bits, io.cmt.rob.enqIdx(i), io.cmt.bdb.enqIdx(i), rboard.io.prjInfo(i), rboard.io.prkInfo(i), iter)
     }
 

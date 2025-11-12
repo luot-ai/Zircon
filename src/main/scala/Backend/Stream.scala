@@ -37,6 +37,7 @@ class StreamEngineIO extends Bundle {
     val rf = Vec(3, new SERFIO)
     val wb = Vec(3, new SEWBIO)
     val is = new SEISIO
+    val rdIter = new SERdIterIO
     val pp  = new SEPipelineIO
     val mem = new MemIO(false)
 }
@@ -95,6 +96,7 @@ class StreamEngine extends Module {
         stateCfg(fifoId(Dst)) := ppBits.cfgState
     }
 
+    // ReadOp stage
     for(i <- 0 until 3){
         io.rf(i).rdata1 := Fifo(0)(io.rf(i).iterCnt)
         io.rf(i).rdata2 := Fifo(1)(io.rf(i).iterCnt)
@@ -103,10 +105,17 @@ class StreamEngine extends Module {
         }
     }
 
+    // dispatch stage
+    val fireNum = PopCount(io.rdIter.fireStream)
+    iCntMap(0) := iCntMap + fireNum
+    io.rdIter.iterCnt := iCntMap(0)
+
+    // Issue stage
     for (i <- 0 until 12) {
         io.is.ready(i) :=  io.is.isCalStream(i) & readyMap(0)(io.is.iterCnt(i)) & readyMap(1)(io.is.iterCnt(i))
     }
 
+    
     //calculate
     val dbgCnt = RegInit(0.U(32.W))
     val srcRdy = VecInit.tabulate(2){ j=> readyMap(fifoId(j))(fifoWordIdx(j)) }.asUInt.andR //src0 src1 has data

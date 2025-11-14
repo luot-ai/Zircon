@@ -107,7 +107,7 @@ class StreamEngine extends Module {
 
     // dispatch stage
     val fireNum = PopCount(io.rdIter.fireStream)
-    iCntMap(0) := iCntMap + fireNum
+    iCntMap(0) := iCntMap(0) + fireNum
     io.rdIter.iterCnt := iCntMap(0)
 
     // Issue stage

@@ -35,7 +35,7 @@ class Dispatch extends Module {
 
     // TODO
     for (i <- 0 until ndcd) {
-      io.seRIter.fireStream(i) := io.fte.instPkg(i).bits.isCalStream && io.cmt.rob.enq(i).fire()
+      io.seRIter.fireStream(i) := io.fte.instPkg(i).bits.isCalStream && io.cmt.rob.enq(i).fire
     }     
     val seIter = WireInit(VecInit.fill(ndcd)(0.U(32.W)))
     seIter(0) := io.seRIter.iterCnt

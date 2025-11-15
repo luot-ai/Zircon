@@ -40,7 +40,7 @@ class Dispatch extends Module {
     val seIter = WireInit(VecInit.fill(ndcd)(0.U(32.W)))
     seIter(0) := io.seRIter.iterCnt
     for (i <- 1 until ndcd) {
-      seIter(i) := Mux(io.seRIter.fireStream(i), seIter(i-1) + 1.U, seIter(i-1))
+      seIter(i) := Mux(io.seRIter.fireStream(i-1), seIter(i-1) + 1.U, seIter(i-1))
     } 
 
     // ready board

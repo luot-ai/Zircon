@@ -96,12 +96,15 @@ class StreamEngine extends Module {
         stateCfg(fifoId(Dst)) := ppBits.cfgState
     }
 
-    // ReadOp stage
+    // ReadOp stage + writeback stage
     for(i <- 0 until 3){
         io.rf(i).rdata1 := Fifo(0)(io.rf(i).iterCnt)
         io.rf(i).rdata2 := Fifo(1)(io.rf(i).iterCnt)
         when(io.wb(i).wvalid){
             Fifo(2)(io.wb(i).iterCnt) := io.wb(i).wdata
+            readyMap(0)(io.wb(i).iterCnt) := false.B
+            readyMap(1)(io.wb(i).iterCnt) := false.B
+            readyMap(2)(io.wb(i).iterCnt) := true.B
         }
     }
 
@@ -112,7 +115,7 @@ class StreamEngine extends Module {
 
     // Issue stage
     for (i <- 0 until 12) {
-        io.is.ready(i) :=  io.is.isCalStream(i) & readyMap(0)(io.is.iterCnt(i)) & readyMap(1)(io.is.iterCnt(i))
+        io.is.ready(i) :=  io.is.isCalStream(i) & readyMap(0)(io.is.iterCnt(i)) & readyMap(1)(io.is.iterCnt(i)) & !readyMap(2)(io.is.iterCnt(i))
     }
 
     

@@ -66,9 +66,7 @@ class Dispatch extends Module {
     dsp.io.bkePkg <> io.bke.instPkg
     io.cmt.rob.enq.zipWithIndex.foreach{ case (enq, i) =>
         enq.valid := io.fte.instPkg(i).valid && dsp.io.ftePkg(i).ready
-        val fteBits = WireDefault(io.fte.instPkg(i).bits)
-        fteBits.cycles.issue := cycleReg
-        enq.bits  := (new ROBEntry)(fteBits)
+        enq.bits  := (new ROBEntry)(io.fte.instPkg(i).bits)
     }
     io.cmt.bdb.enq.zipWithIndex.foreach{ case (enq, i) =>
         enq.valid := io.fte.instPkg(i).valid && dsp.io.ftePkg(i).ready && io.fte.instPkg(i).bits.op(4)

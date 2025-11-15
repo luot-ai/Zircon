@@ -13,6 +13,11 @@ class DispatcherIO extends Bundle {
 class Dispatcher extends Module {
     val io = IO(new DispatcherIO)
     val bkePkgAllReady = io.bkePkg.map(_.map(_.ready)(0)).reduce(_ && _)
+
+    // cycle stat
+    val cycleReg = RegInit(0.U(64.W))
+    cycleReg     := cycleReg + 1.U
+
     for(i <- 0 until niq){
         val portMap      = VecInit.fill(ndcd)(0.U(ndcd.W))
         val portMapTrans = Transpose(portMap)
@@ -24,6 +29,7 @@ class Dispatcher extends Module {
         io.bkePkg(i).zipWithIndex.foreach{case (e, j) =>
             e.valid := portMapTrans(j).orR && bkePkgAllReady
             e.bits  := Mux1H(portMapTrans(j), io.ftePkg.map(_.bits))
+            e.bits.cycles.issue := cycleReg
         }
     }
     io.ftePkg.foreach{ fte =>

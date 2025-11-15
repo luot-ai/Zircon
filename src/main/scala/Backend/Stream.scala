@@ -98,13 +98,15 @@ class StreamEngine extends Module {
 
     // ReadOp stage + writeback stage
     for(i <- 0 until 3){
-        io.rf(i).rdata1 := Fifo(0)(io.rf(i).iterCnt)
-        io.rf(i).rdata2 := Fifo(1)(io.rf(i).iterCnt)
+        val rfWordIdx = (io.rf(i).iterCnt % fifoWord.U) (log2Ceil(fifoWord)-1,0)
+        io.rf(i).rdata1 := Fifo(0)(rfWordIdx)
+        io.rf(i).rdata2 := Fifo(1)(rfWordIdx)
         when(io.wb(i).wvalid){
-            Fifo(2)(io.wb(i).iterCnt) := io.wb(i).wdata
-            readyMap(0)(io.wb(i).iterCnt) := false.B
-            readyMap(1)(io.wb(i).iterCnt) := false.B
-            readyMap(2)(io.wb(i).iterCnt) := true.B
+            val wbWordIdx = (io.wb(i).iterCnt % fifoWord.U) (log2Ceil(fifoWord)-1,0)
+            Fifo(2)(wbWordIdx) := io.wb(i).wdata
+            readyMap(0)(wbWordIdx) := false.B
+            readyMap(1)(wbWordIdx) := false.B
+            readyMap(2)(wbWordIdx) := true.B
         }
     }
 
@@ -115,7 +117,8 @@ class StreamEngine extends Module {
 
     // Issue stage
     for (i <- 0 until 12) {
-        io.is.ready(i) :=  io.is.isCalStream(i) & readyMap(0)(io.is.iterCnt(i)) & readyMap(1)(io.is.iterCnt(i)) & !readyMap(2)(io.is.iterCnt(i))
+        val isWordIdx = (io.is.iterCnt(i) % fifoWord.U) (log2Ceil(fifoWord)-1,0)
+        io.is.ready(i) :=  io.is.isCalStream(i) & readyMap(0)(isWordIdx) & readyMap(1)(isWordIdx) & !readyMap(2)(isWordIdx)
     }
 
     

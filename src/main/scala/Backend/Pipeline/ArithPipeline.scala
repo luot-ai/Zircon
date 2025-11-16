@@ -140,8 +140,8 @@ class ArithPipeline extends Module {
 
     // alu
     alu.io.op            := instPkgEX.op(4, 0)
-    alu.io.src1          := Mux(instPkgEX.op(6), instPkgEX.pc,  Mux(io.fwd.src1Fwd.valid, io.fwd.src1Fwd.bits, instPkgEX.src1))
-    alu.io.src2          := Mux(instPkgEX.op(5), Mux(io.fwd.src2Fwd.valid, io.fwd.src2Fwd.bits, instPkgEX.src2), instPkgEX.imm)
+    alu.io.src1          := Mux(instPkgEX.isCalStream, instPkgEX.src1, Mux(instPkgEX.op(6), instPkgEX.pc,  Mux(io.fwd.src1Fwd.valid, io.fwd.src1Fwd.bits, instPkgEX.src1)))
+    alu.io.src2          := Mux(instPkgEX.isCalStream, instPkgEX.src2, Mux(instPkgEX.op(5), Mux(io.fwd.src2Fwd.valid, io.fwd.src2Fwd.bits, instPkgEX.src2), instPkgEX.imm))
 
     // branch
     branch.io.op         := instPkgEX.op(4, 0)

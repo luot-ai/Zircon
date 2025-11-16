@@ -42,15 +42,9 @@ TODO：
    1. 异步部分：alu的读写
 
 
-## DEBUG
+## TODO
 
-TOOL
-1. 一些assert,print
-2. 模拟器
-3. IQ如何方便debug
+1. 分支预测失误恢复：拷贝一个icntMap commit时赋值，flush时恢复
+2. 测试大循环，记录测试数据
+3. 可以考虑使用差分测试，但我觉得有没必要特别完备
 
-Q
-1. 接口能这么写吗
-3. IQ进队的时候用的itercnt感觉是错误的，不应该简单的那样子直连
-   如果该slot上一个itercnt刚好对应ready而此时入队的inst的iter对应的不是ready，可能会导致错误
-6. 分支预测失误恢复：拷贝一个iterCnt commit时赋值，flush时恢复
